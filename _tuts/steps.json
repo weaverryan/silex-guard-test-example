@@ -1,0 +1,25 @@
+{
+    "steps": [
+        {
+            "id": "start",
+            "name": "start",
+            "description": null
+        },
+        {
+            "id": "add-firewall-security",
+            "name": "Add Firewall+security",
+            "description": null
+        },
+        {
+            "id": "upgrade-to-silex2",
+            "name": "Upgrade to Silex2",
+            "description": null
+        },
+        {
+            "id": "adding-guard",
+            "name": "Adding Guard",
+            "description": null
+        }
+    ],
+    "sha": "e06d470bca23750c847c2797c4984aae5931627c"
+}

@@ -1,0 +1,142 @@
+diff --git a/composer.json b/composer.json
+index 4093130..fa05861 100644
+--- a/composer.json
++++ b/composer.json
+@@ -2,5 +2,10 @@
+     "require": {
+         "silex/silex": "dev-master",
+         "symfony/security": "^3.0"
++    },
++    "autoload": {
++        "psr-4": {
++            "App\\": "src/"
++        }
+     }
+ }
+diff --git a/index.php b/index.php
+index 72d7dce..6b32070 100644
+--- a/index.php
++++ b/index.php
+@@ -8,13 +8,25 @@ $app->register(new Silex\Provider\SecurityServiceProvider());
+ $app['security.firewalls'] = array(
+     'main' => array(
+         'pattern' => '^/',
++        'guard' => [
++            'authenticators' => [
++                'app.token_authenticator'
++            ],
++
++            // 'entry_point' => 'app.token_authenticator',
++        ],
+         'users' => array(
+             // raw password is foo
+             'admin' => array('ROLE_ADMIN', '5FZ2Z8QIkA7UTZ4BYkoC+GsReLf569mSKDsfods6LYQ8t+a8EW9oaircfMpmaLbPBh4FOBiiFyLfuZmTSUwzZg=='),
+         ),
++        //'anonymous' => true,
+     ),
+ );
+ 
++$app['app.token_authenticator'] = function ($app) {
++    return new App\TokenAuthenticator($app['security.encoder_factory']);
++};
++
+ $app->get('/hello/{name}', function ($name) use ($app) {
+     return 'Hello '.$app->escape($name);
+ });
+diff --git a/src/TokenAuthenticator.php b/src/TokenAuthenticator.php
+new file mode 100644
+index 0000000..7944e1f
+--- /dev/null
++++ b/src/TokenAuthenticator.php
+@@ -0,0 +1,91 @@
++<?php
++
++namespace App;
++
++use Symfony\Component\Security\Core\Encoder\EncoderFactoryInterface;
++use Symfony\Component\Security\Guard\AbstractGuardAuthenticator;
++use Symfony\Component\HttpFoundation\Request;
++use Symfony\Component\HttpFoundation\JsonResponse;
++use Symfony\Component\Security\Core\User\UserInterface;
++use Symfony\Component\Security\Core\User\UserProviderInterface;
++use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
++use Symfony\Component\Security\Core\Exception\AuthenticationException;
++
++class TokenAuthenticator extends AbstractGuardAuthenticator
++{
++    private $encoderFactory;
++
++    public function __construct(EncoderFactoryInterface $encoderFactory)
++    {
++        $this->encoderFactory = $encoderFactory;
++    }
++
++    public function getCredentials(Request $request)
++    {
++        if (!$token = $request->headers->get('X-AUTH-TOKEN')) {
++            return;
++        }
++
++        list($username, $secret) = explode(':', $token, 2);
++
++        return array(
++            'username' => $username,
++            'secret' => $secret,
++        );
++    }
++
++    public function getUser($credentials, UserProviderInterface $userProvider)
++    {
++        return $userProvider->loadUserByUsername($credentials['username']);
++    }
++
++    public function checkCredentials($credentials, UserInterface $user)
++    {
++        // check credentials - e.g. make sure the password is valid
++        // no credential check is needed in this case
++
++        $encoder = $this->encoderFactory->getEncoder($user);
++
++        return $encoder->isPasswordValid(
++            $user->getPassword(),
++            $credentials['secret'],
++            $user->getSalt()
++        );
++    }
++
++    public function onAuthenticationSuccess(Request $request, TokenInterface $token, $providerKey)
++    {
++        // on success, let the request continue
++        return;
++    }
++
++    public function onAuthenticationFailure(Request $request, AuthenticationException $exception)
++    {
++        $data = array(
++            'message' => strtr($exception->getMessageKey(), $exception->getMessageData()),
++
++            // or to translate this message
++            // $this->translator->trans($exception->getMessageKey(), $exception->getMessageData())
++        );
++
++        return new JsonResponse($data, 403);
++    }
++
++    /**
++     * Called when authentication is needed, but it's not sent
++     */
++    public function start(Request $request, AuthenticationException $authException = null)
++    {
++        $data = array(
++            // you might translate this message
++            'message' => 'Authentication Required',
++        );
++
++        return new JsonResponse($data, 401);
++    }
++
++    public function supportsRememberMe()
++    {
++        return false;
++    }
++}
